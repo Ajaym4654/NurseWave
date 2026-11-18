@@ -205,7 +205,7 @@ async function api(path,options={}){
   if(options.body && !(options.body instanceof FormData))headers['Content-Type']='application/json';
   const r=await fetch(`${API}/${path}`,{credentials:'same-origin',...options,headers});
   let data={};try{data=await r.json()}catch{}
-  if(!r.ok)throw new Error(data.error||`Request failed (${r.status})`);
+  if(!r.ok)throw new Error(data.message || data.error || `Request failed (${r.status})`);
   return data;
 }
 function normaliseJob(j){return {...j,id:String(j.id),company:j.company||j.company_name||'Healthcare Employer',loc:j.loc||[j.city,j.state].filter(Boolean).join(', '),addr:j.addr||j.address||'',gross:Number(j.gross||j.gross_weekly||0),blend:Number(j.blend||j.blended_rate||0),hrs:Number(j.hrs||j.hours_per_week||0),weeks:Number(j.weeks||j.duration_weeks||0),w2:Number(j.w2||j.w2_rate||0),ot:Number(j.ot||j.overtime_rate||0),nt:Number(j.nt||j.weekly_non_taxable||0),tax:Number(j.tax||j.weekly_taxable||0),openings:Number(j.openings||1),date:j.date||j.created_at||new Date().toISOString()}}

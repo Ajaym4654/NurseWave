@@ -67,13 +67,13 @@ export default async (request) => {
           id ? [id] : []
         );
       } else if (user) {
-        result = await pool.query(
-          `SELECT * FROM jobs
-           WHERE owner_user_id = $1
-           ${id ? "AND id = $2" : ""}
-           ORDER BY created_at DESC`,
-          id ? [user.id, id] : [user.id]
-        );
+  result = await pool.query(
+    `SELECT * FROM jobs
+     WHERE (status = 'active' OR owner_user_id = $1)
+     ${id ? "AND id = $2" : ""}
+     ORDER BY created_at DESC`,
+    id ? [user.id, id] : [user.id]
+  );
       } else {
         result = await pool.query(
           `SELECT * FROM jobs

@@ -62,7 +62,7 @@ export default async (request) => {
       if (user?.role === "super_admin") {
         result = await pool.query(
           `SELECT * FROM jobs
-           ${id ? "WHERE id = $1" : "WHERE status = 'active'"}
+           ${id ? "WHERE id = $1" : ""}
            ORDER BY created_at DESC`,
           id ? [id] : []
         );

@@ -1,0 +1,17 @@
+
+{
+  "name": "nursewave",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "echo Build complete"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.800.0",
+    "@aws-sdk/s3-request-presigner": "^3.800.0",
+    "bcryptjs": "^3.0.2",
+    "jose": "^6.0.11",
+    "pg": "^8.14.1"
+  }
+}

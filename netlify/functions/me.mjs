@@ -10,10 +10,10 @@ export default async (request) => {
 
   if (!user) {
     return json({
-      success: false,
+      success: true,
       user: null,
       message: "Not logged in."
-    }, 401);
+    });
   }
 
   return json({

@@ -144,6 +144,16 @@ export default async request => {
         }
         await client.query("UPDATE users SET password_hash=$1 WHERE id=$2", [passwordHash,locked.rows[0].user_id]);
         await client.query("UPDATE password_reset_tokens SET used_at=NOW() WHERE user_id=$1 AND used_at IS NULL", [locked.rows[0].user_id]);
+        await client.query(`
+          UPDATE password_reset_requests
+          SET status='successfully_changed'
+          WHERE id=(
+            SELECT id FROM password_reset_requests
+            WHERE user_id=$1 AND status='generated'
+            ORDER BY generated_at DESC NULLS LAST, created_at DESC
+            LIMIT 1
+          )
+        `, [locked.rows[0].user_id]);
         await client.query("COMMIT");
       } catch (error) {
         await client.query("ROLLBACK");

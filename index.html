@@ -140,6 +140,11 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
   <h2 style="font-size:26px" id="dashTitle">Your employer dashboard</h2>
   <div id="mine"></div>
 
+  <section id="passwordRequestsPanel" class="hide" style="margin-top:28px">
+    <h2 style="font-size:24px">Password Reset Requests</h2>
+    <p class="co">Generate a secure, one-time reset link and share it directly with the account holder.</p>
+    <div id="passwordRequests"><p class="co">Loading requests…</p></div>
+  </section>
   <h2 style="font-size:24px;margin-top:24px">Applications & resumes</h2>
   <p class="co">Only applications for jobs you own are shown here. Super Admin can review all applications.</p>
   <div id="applications"><p class="co">Loading applications…</p></div>
@@ -244,7 +249,37 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
 
       <button class="btn pri" style="margin-top:16px" type="submit" id="authGo">Log in</button>
       <button class="btn" style="margin-top:16px" type="button" id="authSwap">Create an account</button>
+      <button class="btn" style="margin-top:12px" type="button" id="forgotPasswordBtn">Forgot Password?</button>
       <div class="msg err hide" id="auMsg"></div>
+    </form>
+  </div>
+</dialog>
+
+<!-- PASSWORD RESET REQUEST / SET NEW PASSWORD -->
+<dialog id="passwordDlg">
+  <div class="dh">
+    <h2 id="passwordDlgTitle" style="font-size:28px">Request password reset</h2>
+    <button class="x" data-close aria-label="Close">×</button>
+  </div>
+  <div class="db">
+    <form id="passwordRequestForm">
+      <p class="co">Enter your registered employer email. Your request will appear in the Super Admin dashboard.</p>
+      <label>Registered email
+        <input id="resetRequestEmail" type="email" required autocomplete="email">
+      </label>
+      <button class="btn pri" style="margin-top:16px" type="submit">Submit request</button>
+      <div class="msg hide" id="passwordRequestMsg"></div>
+    </form>
+    <form id="passwordCompleteForm" class="hide">
+      <p class="co">Choose a new password for your NurseWave employer account.</p>
+      <label>New password (10–128 characters)
+        <input id="newResetPassword" type="password" minlength="10" maxlength="128" required autocomplete="new-password">
+      </label>
+      <label>Confirm new password
+        <input id="confirmResetPassword" type="password" minlength="10" maxlength="128" required autocomplete="new-password">
+      </label>
+      <button class="btn pri" style="margin-top:16px" type="submit">Update password</button>
+      <div class="msg hide" id="passwordCompleteMsg"></div>
     </form>
   </div>
 </dialog>
@@ -438,6 +473,9 @@ async function load() {
 
     if (me) {
       await loadApplications();
+      if (me.role==='super_admin') await loadPasswordRequests();
+    } else {
+      $('#passwordRequests').innerHTML='';
     }
 
   } catch(e) {
@@ -524,6 +562,7 @@ function render() {
     : 'Employer login';
 
   $('#dash').classList.toggle('hide',!me);
+  $('#passwordRequestsPanel').classList.toggle('hide',me?.role!=='super_admin');
 
   $('#dashTitle').textContent =
     me?.role==='super_admin'
@@ -693,6 +732,7 @@ function setAuth(s) {
   $('#auCo').closest('label').classList.toggle('hide',!s);
   $('#auNameWrap').classList.toggle('hide',!s);
   $('#auMsg').classList.add('hide');
+  $('#forgotPasswordBtn').classList.toggle('hide',s);
 }
 
 $('#authBtn').onclick=async()=>{
@@ -713,6 +753,60 @@ $('#authBtn').onclick=async()=>{
 };
 
 $('#authSwap').onclick=()=>setAuth(!signup);
+
+$('#forgotPasswordBtn').onclick=()=>{
+  $('#authDlg').close();
+  $('#passwordRequestForm').classList.remove('hide');
+  $('#passwordCompleteForm').classList.add('hide');
+  $('#passwordDlgTitle').textContent='Request password reset';
+  $('#passwordRequestMsg').classList.add('hide');
+  $('#passwordDlg').showModal();
+};
+
+$('#passwordRequestForm').onsubmit=async e=>{
+  e.preventDefault();
+  const msg=$('#passwordRequestMsg');
+  msg.classList.remove('hide','err');
+  msg.textContent='Submitting request…';
+  try {
+    const result=await api('password-reset',{
+      method:'POST',
+      body:JSON.stringify({action:'request',email:$('#resetRequestEmail').value.trim()})
+    });
+    msg.textContent=result.message;
+    e.target.reset();
+  } catch(error) {
+    msg.textContent=error.message;
+    msg.classList.add('err');
+  }
+};
+
+$('#passwordCompleteForm').onsubmit=async e=>{
+  e.preventDefault();
+  const msg=$('#passwordCompleteMsg');
+  msg.classList.remove('hide','err');
+  const password=$('#newResetPassword').value;
+  if(password!==$('#confirmResetPassword').value){
+    msg.textContent='The passwords do not match.';
+    msg.classList.add('err');
+    return;
+  }
+  msg.textContent='Updating password…';
+  try {
+    const result=await api('password-reset',{
+      method:'POST',
+      body:JSON.stringify({action:'complete',token:resetToken,password})
+    });
+    msg.textContent=result.message;
+    resetToken='';
+    history.replaceState({},document.title,location.pathname);
+    e.target.reset();
+    setTimeout(()=>$('#passwordDlg').close(),1800);
+  } catch(error) {
+    msg.textContent=error.message;
+    msg.classList.add('err');
+  }
+};
 
 $('#authForm').onsubmit=async e=>{
   e.preventDefault();
@@ -1077,6 +1171,67 @@ async function loadApplications() {
     console.error('Applications loading error:',e);
     box.innerHTML = `<p class="co">Unable to load applications: ${esc(e.message)}</p>`;
   }
+}
+
+async function loadPasswordRequests() {
+  const panel=$('#passwordRequests');
+  if(!me || me.role!=='super_admin') return;
+  panel.innerHTML='<p class="co">Loading requests…</p>';
+  try {
+    const result=await api('password-reset');
+    const requests=result.requests||[];
+    panel.innerHTML=requests.length ? requests.map(r=>`
+      <div class="mine">
+        <span>
+          <b>${esc(r.full_name||'Employer')}</b>
+          <span class="co">${esc(r.email)} · ${esc(r.company_name||'')}</span>
+          <span class="co">Requested: ${esc(applicationDate(r.created_at))} · Status: ${esc(r.status)}</span>
+        </span>
+        <span>
+          ${r.status==='pending'
+            ? `<button class="btn sm pri" type="button" data-generate-reset="${esc(r.id)}">Generate Reset Link</button>`
+            : '<span class="co">Link already generated</span>'}
+        </span>
+      </div>`).join('') : '<p class="co">No password reset requests yet.</p>';
+
+    panel.querySelectorAll('[data-generate-reset]').forEach(button=>{
+      button.addEventListener('click',async()=>{
+        button.disabled=true;
+        button.textContent='Generating…';
+        try{
+          const generated=await api('password-reset',{
+            method:'POST',
+            body:JSON.stringify({action:'generate',request_id:Number(button.dataset.generateReset)})
+          });
+          await navigator.clipboard.writeText(generated.link);
+          toast('Reset link generated and copied');
+          const line=button.closest('.mine');
+          line.querySelector('span:last-child').innerHTML=`
+            <a class="resume-link" href="${esc(generated.link)}" target="_blank" rel="noopener">Open reset link</a>
+            <button class="btn sm" type="button" data-copy-reset>Copy link</button>`;
+          line.querySelector('[data-copy-reset]').addEventListener('click',async()=>{
+            await navigator.clipboard.writeText(generated.link);
+            toast('Reset link copied');
+          });
+          await loadPasswordRequests();
+        }catch(error){
+          button.disabled=false;
+          button.textContent='Generate Reset Link';
+          toast(error.message);
+        }
+      });
+    });
+  }catch(error){
+    panel.innerHTML=`<p class="co">Unable to load reset requests: ${esc(error.message)}</p>`;
+  }
+}
+
+let resetToken=new URLSearchParams(location.search).get('reset')||'';
+if(resetToken){
+  $('#passwordRequestForm').classList.add('hide');
+  $('#passwordCompleteForm').classList.remove('hide');
+  $('#passwordDlgTitle').textContent='Set a new password';
+  $('#passwordDlg').showModal();
 }
 
 // INITIAL LOAD

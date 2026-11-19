@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /netlify/functions/
+
+Sitemap: https://nextnuvora.netlify.app/sitemap.xml

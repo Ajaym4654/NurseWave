@@ -53,7 +53,7 @@ export default async (request) => {
       }, 401);
     }
 
-    const cookie = await createSession(user);
+    const cookie = await createSession(user, request);
 
     return json({
       success: true,

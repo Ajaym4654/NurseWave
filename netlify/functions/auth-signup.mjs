@@ -53,6 +53,7 @@ export default async (request) => {
   }
 
   try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'`);
     const existing = await pool.query(
       "SELECT id FROM users WHERE email = $1",
       [email]
@@ -69,22 +70,19 @@ export default async (request) => {
 
     const result = await pool.query(
       `INSERT INTO users
-        (full_name, company_name, email, password_hash, role, is_active)
-       VALUES ($1, $2, $3, $4, 'employer', TRUE)
-       RETURNING id, full_name, company_name, email, role`,
+        (full_name, company_name, email, password_hash, role, is_active, approval_status)
+       VALUES ($1, $2, $3, $4, 'employer', FALSE, 'pending')
+       RETURNING id, full_name, company_name, email, role, approval_status`,
       [fullName, companyName, email, passwordHash]
     );
 
     const user = result.rows[0];
-    const cookie = await createSession(user);
-
     return json({
       success: true,
-      message: "Account created successfully.",
+      pending_approval: true,
+      message: "Your account has been created and is waiting for Super Admin approval. You will be able to log in after approval.",
       user: publicUser(user)
-    }, 201, {
-      "Set-Cookie": cookie
-    });
+    }, 201);
 
   } catch (error) {
     console.error("Signup error:", error);

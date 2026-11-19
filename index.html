@@ -447,6 +447,17 @@ async function api(path,options={}) {
     throw new Error(data.message || data.error || `Request failed (${r.status})`);
   }
 
+  const method=String(options.method||'GET').toUpperCase();
+  if(method!=='GET' && !['logout','auth-login','activity'].includes(path)){
+    fetch(`${API}/activity`,{
+      method:'POST',
+      credentials:'same-origin',
+      keepalive:true,
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:`${method} ${path}`})
+    }).catch(()=>{});
+  }
+
   return data;
 }
 

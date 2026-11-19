@@ -293,13 +293,16 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
       </div>
 
       <div class="row">
-        <label>W2 hourly rate ($)<input name="w2" type="number" step="0.01" min="0" required></label>
-        <label>Overtime rate ($)<input name="ot" type="number" step="0.01" min="0" placeholder="Default: 1.5 × W2"></label>
+        <label>Pay Rate (Hourly) ($)<input name="payrate" type="number" step="0.01" min="0" required></label>
+        <label>Gross Weekly ($)<input name="gross" type="number" step="0.01" min="0" required></label>
       </div>
 
-      <label>Weekly non-taxable amount ($)
-        <input name="nt" type="number" step="0.01" min="0" value="0" required>
-      </label>
+      <div class="row">
+        <label>Non-Taxable Amount ($)<input name="nt" type="number" step="0.01" min="0" required></label>
+        <label>Taxable Amount ($)<input name="tax" type="number" step="0.01" min="0" required></label>
+      </div>
+
+      <label>W2 Hourly Rate ($)<input name="w2" type="number" step="0.01" min="0" required></label>
 
       <label>About the assignment<textarea name="about" rows="3" required></textarea></label>
       <label>Requirements (one per line)<textarea name="reqs" rows="3"></textarea></label>
@@ -544,7 +547,7 @@ function openJob(id) {
 
   $('#jF').innerHTML = `
     <div class="fact big"><small>Gross weekly pay</small><b>${usd(j.gross)}</b></div>
-    <div class="fact"><small>Blended rate</small><b>${usd(j.blend)}/hr</b></div>
+    <div class="fact"><small>Pay rate (hourly)</small><b>${usd(j.blend)}/hr</b></div>
     <div class="fact"><small>Duration</small>${j.weeks} weeks</div>
     <div class="fact"><small>Hours per week</small>${j.hrs}</div>
     ${j.openings>1?`<div class="fact"><small>Openings</small>${j.openings}</div>`:''}`;
@@ -552,12 +555,11 @@ function openJob(id) {
   $('#jBody').innerHTML = `
     <h4>Pay package</h4>
     <table class="pk">
+      <tr><td>Pay rate (hourly)</td><td>${usd(j.blend)}</td></tr>
+      <tr><td>Gross weekly</td><td>${usd(j.gross)}</td></tr>
+      <tr><td>Non-taxable amount</td><td>${usd(j.nt)}</td></tr>
+      <tr><td>Taxable amount</td><td>${usd(j.tax)}</td></tr>
       <tr><td>W2 hourly rate</td><td>${usd(j.w2)}</td></tr>
-      <tr><td>Overtime rate</td><td>${usd(j.ot)}</td></tr>
-      <tr><td>Weekly taxable</td><td>${usd(j.tax)}</td></tr>
-      <tr><td>Weekly non-taxable</td><td>${usd(j.nt)}</td></tr>
-      <tr class="t"><td>Gross weekly</td><td>${usd(j.gross)}</td></tr>
-      <tr><td>Estimated ${j.weeks}-week total</td><td>${usd(j.gross*j.weeks)}</td></tr>
     </table>
 
     <h4>About the assignment</h4>
@@ -782,8 +784,10 @@ function openPost(id) {
       zip:j.zip,
       weeks:j.weeks,
       w2:j.w2,
-      ot:j.ot,
+      payrate:j.blend,
+      gross:j.gross,
       nt:j.nt,
+      tax:j.tax,
       about:j.about,
       reqs:j.reqs,
       perks:j.perks
@@ -804,14 +808,6 @@ $('#postForm').onsubmit=async e=>{
 
   const f = Object.fromEntries(new FormData(e.target));
 
-  const h=+f.hrs;
-  const w2=+f.w2;
-  const ot=+f.ot||w2*1.5;
-  const nt=+f.nt;
-
-  const tax=w2*Math.min(h,40)+ot*Math.max(h-40,0);
-  const gross=tax+nt;
-
   const body={
     title:f.title,
     street:f.addr,
@@ -819,13 +815,13 @@ $('#postForm').onsubmit=async e=>{
     zip:f.zip,
     state:f.state,
     weeks:+f.weeks,
-    hours_per_week:h,
-    w2_rate:w2,
-    overtime_rate:ot,
-    weekly_non_taxable:nt,
-    weekly_taxable:tax,
-    gross_weekly:gross,
-    blended_rate:gross/h,
+    hours_per_week:+f.hrs,
+    w2_rate:+f.w2,
+    overtime_rate:0,
+    weekly_non_taxable:+f.nt,
+    weekly_taxable:+f.tax,
+    gross_weekly:+f.gross,
+    blended_rate:+f.payrate,
     about:f.about,
     requirements:f.reqs,
     perks:f.perks

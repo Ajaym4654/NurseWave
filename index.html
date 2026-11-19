@@ -429,7 +429,6 @@ let posF = '';
 let signup = false;
 let editId = null;
 let wantPost = false;
-let initialReloadLogoutChecked = false;
 
 const colors = ['#5b3df5','#e0457b','#0e9f6e','#f08a24','#2b7de9','#8a3ffc'];
 
@@ -505,13 +504,7 @@ function normaliseJob(j) {
 
 async function load() {
   try {
-    if (!initialReloadLogoutChecked) {
-      initialReloadLogoutChecked = true;
-      const navigation=performance.getEntriesByType('navigation')[0];
-      if(navigation?.type==='reload') {
-        await api('logout',{method:'POST'}).catch(()=>{});
-      }
-    }
+    // Preserve the authenticated session across page refreshes.
     const [jr,mr] = await Promise.all([
       api('jobs'),
       api('me')

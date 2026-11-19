@@ -450,6 +450,7 @@ const APPLICATIONS_PER_PAGE = 25;
 let cat = 'All';
 let typeF = '';
 let posF = '';
+let specialtyF = '';
 let signup = false;
 let editId = null;
 let wantPost = false;
@@ -569,6 +570,7 @@ function render() {
 
   const states = [...new Set(jobs.map(j=>j.state).filter(Boolean))].sort();
   const poss = [...new Set(jobs.map(j=>j.title).filter(Boolean))].sort();
+  const specialties = [...new Set(jobs.map(j=>(j.specialty||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
 
   const opt = (v,cur,l) =>
     `<option value="${esc(v)}" ${v===cur?'selected':''}>${esc(l||v)}</option>`;
@@ -587,12 +589,18 @@ function render() {
     <select id="typeSel" aria-label="Hours per week">
       ${opt('',typeF,'All hours')}
       ${[36,40,48].map(t=>opt(String(t),typeF,t+' hrs/week')).join('')}
+    </select>
+
+    <select id="specialtySel" aria-label="Specialty">
+      ${opt('',specialtyF,'All specialties')}
+      ${specialties.map(x=>opt(x,specialtyF)).join('')}
     </select>`;
 
   const res = jobs.filter(j =>
     (cat==='All' || j.state===cat) &&
     (!posF || j.title===posF) &&
     (!typeF || String(j.hrs)===typeF) &&
+    (!specialtyF || (j.specialty||'').trim()===specialtyF) &&
     (j.title+' '+(j.specialty||'')+' '+j.company+' '+j.loc).toLowerCase().includes(q)
   );
 
@@ -781,6 +789,7 @@ document.addEventListener('change',e=>{
   if (i==='stateSel') cat=v;
   else if (i==='posSel') posF=v;
   else if (i==='typeSel') typeF=v;
+  else if (i==='specialtySel') specialtyF=v;
   else return;
 
   render();

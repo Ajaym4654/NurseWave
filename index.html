@@ -147,6 +147,13 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
       <div id="passwordRequests"><p class="co">Loading requests…</p></div>
     </div>
   </section>
+  <section id="activityPanel" class="hide" style="margin-top:24px">
+    <button class="btn" type="button" id="activityToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Activity Log & Active Devices</button>
+    <div id="activityContent" class="hide" style="margin-top:14px">
+      <div id="activeDeviceSummary" class="co">Loading active devices…</div>
+      <div id="activityLogs"><p class="co">Loading activity…</p></div>
+    </div>
+  </section>
   <section style="margin-top:24px">
     <button class="btn" type="button" id="applicationsToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Applications & resumes</button>
     <div id="applicationsContent" class="hide" style="margin-top:14px">
@@ -467,6 +474,10 @@ function normaliseJob(j) {
 
 async function load() {
   try {
+    const navigation=performance.getEntriesByType('navigation')[0];
+    if(navigation?.type==='reload') {
+      await api('logout',{method:'POST'}).catch(()=>{});
+    }
     const [jr,mr] = await Promise.all([
       api('jobs'),
       api('me')
@@ -479,7 +490,10 @@ async function load() {
 
     if (me) {
       await loadApplications();
-      if (me.role==='super_admin') await loadPasswordRequests();
+      if (me.role==='super_admin') {
+        await loadPasswordRequests();
+        await loadActivity();
+      }
     } else {
       $('#passwordRequests').innerHTML='';
     }
@@ -569,6 +583,7 @@ function render() {
 
   $('#dash').classList.toggle('hide',!me);
   $('#passwordRequestsPanel').classList.toggle('hide',me?.role!=='super_admin');
+  $('#activityPanel').classList.toggle('hide',me?.role!=='super_admin');
 
   $('#dashTitle').textContent =
     me?.role==='super_admin'
@@ -1261,6 +1276,88 @@ function renderPasswordRequests(){
     });
   });
 }
+let activityData=[];
+let activityPage=1;
+const ACTIVITY_PER_PAGE=25;
+
+async function loadActivity(){
+  if(!me || me.role!=='super_admin') return;
+  const box=$('#activityLogs');
+  box.innerHTML='<p class="co">Loading activity…</p>';
+  try{
+    const result=await api('activity');
+    const sessions=result.active_sessions||[];
+    activityData=result.activities||[];
+    const byUser={};
+    sessions.forEach(session=>{
+      const key=String(session.user_id);
+      byUser[key]=(byUser[key]||0)+1;
+    });
+    $('#activeDeviceSummary').innerHTML=`
+      <b>Currently logged-in devices: ${sessions.length}</b>
+      <div class="app-table-wrap" style="margin-top:10px">
+        <table class="app-table">
+          <thead><tr><th>User ID</th><th>Name / Email</th><th>Role</th><th>Device / Browser</th><th>IP Address</th><th>Login Time</th><th>Last Active</th><th>User Devices</th></tr></thead>
+          <tbody>${sessions.length?sessions.map(x=>`
+            <tr>
+              <td>${esc(x.user_id)}</td>
+              <td>${esc(x.full_name||'—')}<br><span class="co">${esc(x.email||'')}</span></td>
+              <td>${esc(x.role||'')}</td>
+              <td>${esc(x.device_label||'Unknown')}<br><span class="co">${esc(x.user_agent||'')}</span></td>
+              <td>${esc(x.ip_address||'Unknown')}</td>
+              <td>${esc(applicationDate(x.created_at))}</td>
+              <td>${esc(applicationDate(x.last_seen_at))}</td>
+              <td>${byUser[String(x.user_id)]||1}</td>
+            </tr>`).join(''):'<tr><td colspan="8">No active sessions.</td></tr>'}</tbody>
+        </table>
+      </div>`;
+    activityPage=1;
+    renderActivityLogs();
+  }catch(error){
+    box.innerHTML=`<p class="co">Unable to load activity log: ${esc(error.message)}</p>`;
+  }
+}
+
+function renderActivityLogs(){
+  const box=$('#activityLogs');
+  const total=activityData.length;
+  const pageCount=Math.max(1,Math.ceil(total/ACTIVITY_PER_PAGE));
+  activityPage=Math.min(Math.max(1,activityPage),pageCount);
+  const from=total?(activityPage-1)*ACTIVITY_PER_PAGE:0;
+  const to=Math.min(from+ACTIVITY_PER_PAGE,total);
+  const rows=activityData.slice(from,to);
+  box.innerHTML=`
+    <h3 style="margin:22px 0 10px">Login & Activity History</h3>
+    <div class="app-table-wrap">
+      <table class="app-table">
+        <thead><tr><th>Time</th><th>User ID</th><th>User</th><th>Activity</th><th>Device / Browser</th><th>IP Address</th><th>Session ID</th></tr></thead>
+        <tbody>${rows.length?rows.map(x=>`
+          <tr>
+            <td>${esc(applicationDate(x.created_at))}</td>
+            <td>${esc(x.user_id??'—')}</td>
+            <td>${esc(x.full_name||'Unknown')}<br><span class="co">${esc(x.email||'')}</span></td>
+            <td>${esc(String(x.event_type||'').replaceAll('_',' ').toUpperCase())}</td>
+            <td>${esc(x.details?.device||'')}<br><span class="co">${esc(x.user_agent||'')}</span></td>
+            <td>${esc(x.ip_address||'Unknown')}</td>
+            <td>${esc(x.session_id||'—')}</td>
+          </tr>`).join(''):'<tr><td colspan="7">No activity recorded yet.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="app-pagination">
+      <div class="app-count">Showing ${total?from+1:0}–${to} of ${total} activities · Page ${activityPage} of ${pageCount}</div>
+      <div class="page-actions">
+        <button class="btn sm" type="button" data-activity-page="prev" ${activityPage<=1?'disabled':''}>Previous</button>
+        <button class="btn sm" type="button" data-activity-page="next" ${activityPage>=pageCount?'disabled':''}>Next</button>
+      </div>
+    </div>`;
+  box.querySelectorAll('[data-activity-page]').forEach(button=>{
+    button.addEventListener('click',()=>{
+      activityPage+=button.dataset.activityPage==='next'?1:-1;
+      renderActivityLogs();
+    });
+  });
+}
+
 let resetToken=new URLSearchParams(location.search).get('reset')||'';
 if(resetToken){
   $('#passwordRequestForm').classList.add('hide');
@@ -1279,6 +1376,7 @@ function setupDashboardToggle(buttonId,contentId,label) {
   });
 }
 setupDashboardToggle('passwordRequestsToggle','passwordRequestsContent','Password Reset Requests');
+setupDashboardToggle('activityToggle','activityContent','Activity Log & Active Devices');
 setupDashboardToggle('applicationsToggle','applicationsContent','Applications & resumes');
 
 // INITIAL LOAD

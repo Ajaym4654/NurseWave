@@ -387,6 +387,8 @@ function normaliseJob(j) {
     ...j,
     id:String(j.id),
     company:j.company || j.company_name || 'Healthcare Employer',
+    agency:j.agency_name || j.company || j.company_name || 'Healthcare Employer',
+    recruiter:j.recruiter_name || '',
     loc:j.loc || [j.city,j.state].filter(Boolean).join(', '),
     addr:j.addr || j.address || '',
     gross:Number(j.gross || j.gross_weekly || 0),
@@ -519,7 +521,8 @@ function render() {
       <div class="mine">
         <span>
           <b>${esc(j.title)}</b>
-          <span class="co">${esc(j.company)} · ${usd(j.gross)}/week</span>
+          <span class="co">Agency: ${esc(j.agency)} · Recruiter: ${esc(j.recruiter || 'Not available')}</span>
+          <span class="co">${usd(j.gross)}/week · ${esc(j.loc)}</span>
         </span>
 
         <span>

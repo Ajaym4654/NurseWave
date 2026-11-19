@@ -1203,16 +1203,14 @@ async function loadPasswordRequests() {
             method:'POST',
             body:JSON.stringify({action:'generate',request_id:Number(button.dataset.generateReset)})
           });
-          await navigator.clipboard.writeText(generated.link);
-          toast('Reset link generated and copied');
-          const line=button.closest('.mine');
-          line.querySelector('span:last-child').innerHTML=`
-            <a class="resume-link" href="${esc(generated.link)}" target="_blank" rel="noopener">Open reset link</a>
-            <button class="btn sm" type="button" data-copy-reset>Copy link</button>`;
-          line.querySelector('[data-copy-reset]').addEventListener('click',async()=>{
+          let copied=false;
+          try {
             await navigator.clipboard.writeText(generated.link);
-            toast('Reset link copied');
-          });
+            copied=true;
+          } catch {
+            window.prompt('Copy this password reset link and share it with the user:',generated.link);
+          }
+          toast(copied?'Reset link generated and copied':'Reset link generated');
           await loadPasswordRequests();
         }catch(error){
           button.disabled=false;

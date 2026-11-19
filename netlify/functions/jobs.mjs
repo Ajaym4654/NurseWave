@@ -23,6 +23,8 @@ function normalize(row) {
     owner_user_id: row.owner_user_id,
     title: row.title,
     company: row.company,
+    agency_name: row.agency_name || row.company,
+    recruiter_name: row.recruiter_name || "",
     street: row.street,
     city: row.city,
     zip: row.zip,
@@ -62,25 +64,34 @@ export default async (request) => {
 
       if (user?.role === "super_admin") {
         result = await pool.query(
-          `SELECT * FROM jobs
-           ${id ? "WHERE id = $1" : ""}
-           ORDER BY created_at DESC`,
+          `SELECT jobs.*, u.full_name AS recruiter_name,
+                  u.company_name AS agency_name
+           FROM jobs
+           LEFT JOIN users u ON u.id = jobs.owner_user_id
+           ${id ? "WHERE jobs.id = $1" : ""}
+           ORDER BY jobs.created_at DESC`,
           id ? [id] : []
         );
       } else if (user) {
   result = await pool.query(
-    `SELECT * FROM jobs
-     WHERE (status = 'active' OR owner_user_id = $1)
-     ${id ? "AND id = $2" : ""}
-     ORDER BY created_at DESC`,
+    `SELECT jobs.*, u.full_name AS recruiter_name,
+            u.company_name AS agency_name
+     FROM jobs
+     LEFT JOIN users u ON u.id = jobs.owner_user_id
+     WHERE (jobs.status = 'active' OR jobs.owner_user_id = $1)
+     ${id ? "AND jobs.id = $2" : ""}
+     ORDER BY jobs.created_at DESC`,
     id ? [user.id, id] : [user.id]
   );
       } else {
         result = await pool.query(
-          `SELECT * FROM jobs
-           WHERE status = 'active'
-           ${id ? "AND id = $1" : ""}
-           ORDER BY created_at DESC`,
+          `SELECT jobs.*, u.full_name AS recruiter_name,
+                  u.company_name AS agency_name
+           FROM jobs
+           LEFT JOIN users u ON u.id = jobs.owner_user_id
+           WHERE jobs.status = 'active'
+           ${id ? "AND jobs.id = $1" : ""}
+           ORDER BY jobs.created_at DESC`,
           id ? [id] : []
         );
       }

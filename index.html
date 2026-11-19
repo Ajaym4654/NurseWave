@@ -79,6 +79,25 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
 .pk td{padding:8px 0;border-top:1px solid var(--line)}
 .pk td:last-child{text-align:right;font-weight:700}
 .pk tr.t td{font-size:19px}
+
+.app-toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:18px 0 12px}
+.app-toolbar input,.app-toolbar select{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px 12px;min-width:140px;max-width:100%}
+.app-toolbar input{flex:1;min-width:210px}
+.app-table-wrap{width:100%;overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:#fff}
+.app-table{width:100%;min-width:1150px;border-collapse:collapse;font-size:13px;white-space:nowrap}
+.app-table th{background:#edf5f0;color:#33483e;text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:1}
+.app-table td{padding:10px 12px;border-bottom:1px solid #e9efeb;vertical-align:middle}
+.app-table tbody tr:hover{background:#f5faf6}
+.app-table tbody tr:last-child td{border-bottom:0}
+.app-table .candidate-name{font-weight:700;color:var(--ink)}
+.app-table .resume-link{color:var(--violet);font-weight:700;text-decoration:none}
+.app-table .resume-link:hover{text-decoration:underline}
+.app-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 2px 2px}
+.app-pagination .page-actions{display:flex;gap:8px}
+.app-pagination button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+.app-count{font-size:13px;color:var(--muted)}
+.app-empty{padding:24px;text-align:center;color:var(--muted)}
+
 @media(max-width:600px){.hero{padding:38px 22px}.row{grid-template-columns:1fr}.wrap{padding:0 14px}.search{border-radius:18px}.search .btn{padding:8px 12px}.grid{grid-template-columns:1fr}.mine{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -311,6 +330,9 @@ const API = '/.netlify/functions';
 
 let jobs = [];
 let me = null;
+let applicationData = [];
+let applicationPage = 1;
+const APPLICATIONS_PER_PAGE = 25;
 let cat = 'All';
 let typeF = '';
 let posF = '';
@@ -851,94 +873,132 @@ $('#applyForm').onsubmit=async e=>{
   }
 };
 
-// LOAD APPLICATIONS AND RESUMES
-async function loadApplications() {
-  const box=$('#applications');
+// LOAD APPLICATIONS AND RESUMES — COMPACT TABLE
+function applicationDate(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString();
+}
 
+function renderApplications() {
+  const box = $('#applications');
+  const search = ($('#appSearch')?.value || '').trim().toLowerCase();
+  const jobFilter = $('#appJobFilter')?.value || '';
+  const stateFilter = $('#appStateFilter')?.value || '';
+  const statusFilter = $('#appStatusFilter')?.value || '';
+
+  const sorted = [...applicationData].sort((a,b) =>
+    new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+  );
+  const jobsList = [...new Set(sorted.map(a => a.job_title).filter(Boolean))].sort();
+  const statesList = [...new Set(sorted.map(a => a.job_state || a.state).filter(Boolean))].sort();
+  const statusesList = [...new Set(sorted.map(a => a.status || 'New').filter(Boolean))].sort();
+  const option = (value, selected, label=value) =>
+    `<option value="${esc(value)}" ${value===selected?'selected':''}>${esc(label)}</option>`;
+
+  const toolbar = `
+    <div class="app-toolbar">
+      <input id="appSearch" type="search" value="${esc(search)}" placeholder="Search name, phone, email, job or license" aria-label="Search applications">
+      <select id="appJobFilter" aria-label="Filter by job">
+        ${option('',jobFilter,'All jobs')}${jobsList.map(x=>option(x,jobFilter)).join('')}
+      </select>
+      <select id="appStateFilter" aria-label="Filter by state">
+        ${option('',stateFilter,'All states')}${statesList.map(x=>option(x,stateFilter)).join('')}
+      </select>
+      <select id="appStatusFilter" aria-label="Filter by status">
+        ${option('',statusFilter,'All statuses')}${statusesList.map(x=>option(x,statusFilter)).join('')}
+      </select>
+    </div>`;
+
+  const filtered = sorted.filter(a => {
+    const haystack = [
+      a.candidate_name, a.name, a.candidate_phone, a.phone,
+      a.candidate_email, a.email, a.job_title,
+      a.nursing_license, a.license
+    ].join(' ').toLowerCase();
+    return (!search || haystack.includes(search)) &&
+      (!jobFilter || a.job_title === jobFilter) &&
+      (!stateFilter || (a.job_state || a.state) === stateFilter) &&
+      (!statusFilter || (a.status || 'New') === statusFilter);
+  });
+
+  const total = filtered.length;
+  const pageCount = Math.max(1, Math.ceil(total / APPLICATIONS_PER_PAGE));
+  applicationPage = Math.min(Math.max(1, applicationPage), pageCount);
+  const from = total ? (applicationPage - 1) * APPLICATIONS_PER_PAGE : 0;
+  const to = Math.min(from + APPLICATIONS_PER_PAGE, total);
+  const pageRows = filtered.slice(from, to);
+
+  const table = pageRows.length ? `
+    <div class="app-table-wrap">
+      <table class="app-table">
+        <thead><tr><th>#</th><th>Candidate Name</th><th>Phone</th><th>Email</th><th>Job Position</th><th>License</th><th>State</th><th>Status</th><th>Applied Date</th><th>Resume</th></tr></thead>
+        <tbody>${pageRows.map((a,i)=>`
+          <tr>
+            <td>${from+i+1}</td>
+            <td class="candidate-name">${esc(a.candidate_name||a.name||'—')}</td>
+            <td>${esc(a.candidate_phone||a.phone||'—')}</td>
+            <td>${esc(a.candidate_email||a.email||'—')}</td>
+            <td>${esc(a.job_title||'—')}</td>
+            <td>${esc(a.nursing_license||a.license||'—')}</td>
+            <td>${esc(a.job_state||a.state||'—')}</td>
+            <td>${esc(a.status||'New')}</td>
+            <td>${esc(applicationDate(a.created_at))}</td>
+            <td>${a.has_resume===true || a.has_resume==='true'
+              ? `<a class="resume-link" href="${API}/resume?applicationId=${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.original_filename||'View resume')}</a>`
+              : '<span class="co">Not linked</span>'}</td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '<div class="app-empty">No applications match your search or filters.</div>';
+
+  box.innerHTML = toolbar + table + `
+    <div class="app-pagination">
+      <div class="app-count">Showing ${total ? from+1 : 0}–${to} of ${total} applications · Page ${applicationPage} of ${pageCount}</div>
+      <div class="page-actions">
+        <button class="btn sm" type="button" data-app-page="prev" ${applicationPage<=1?'disabled':''}>Previous</button>
+        <button class="btn sm" type="button" data-app-page="next" ${applicationPage>=pageCount?'disabled':''}>Next</button>
+      </div>
+    </div>`;
+
+  $('#appSearch').addEventListener('input', () => {
+    applicationPage = 1;
+    const field = $('#appSearch');
+    const cursor = field.selectionStart;
+    const value = field.value;
+    renderApplications();
+    $('#appSearch').focus();
+    $('#appSearch').setSelectionRange(cursor,cursor);
+  });
+  ['appJobFilter','appStateFilter','appStatusFilter'].forEach(id => {
+    $('#'+id).addEventListener('change', () => {
+      applicationPage = 1;
+      renderApplications();
+    });
+  });
+  box.querySelectorAll('[data-app-page]').forEach(button => {
+    button.addEventListener('click', () => {
+      applicationPage += button.dataset.appPage === 'next' ? 1 : -1;
+      renderApplications();
+    });
+  });
+}
+
+async function loadApplications() {
+  const box = $('#applications');
   if (!me) {
-    box.innerHTML='';
+    applicationData = [];
+    box.innerHTML = '';
     return;
   }
-
-  box.innerHTML='<p class="co">Loading applications…</p>';
-
+  box.innerHTML = '<p class="co">Loading applications…</p>';
   try {
-    const r=await api('applications');
-    const apps=r.applications||[];
-
-    box.innerHTML=apps.length
-      ? apps.map(a=>`
-        <div class="mine">
-
-          <div style="flex:1;min-width:230px">
-
-            <h3 style="font-size:19px">
-              ${esc(a.candidate_name||a.name||'Name not available')}
-            </h3>
-
-            <div class="co" style="margin-top:7px">
-              <b>Email:</b> ${esc(a.email||a.candidate_email||'Not provided')}
-            </div>
-
-            <div class="co">
-              <b>Phone:</b> ${esc(a.phone||a.candidate_phone||'Not provided')}
-            </div>
-
-            <div class="co">
-              <b>Job:</b> ${esc(a.job_title||'—')}
-            </div>
-
-            <div class="co">
-              <b>License:</b> ${esc(a.nursing_license||a.license||'—')}
-            </div>
-
-            <div class="co">
-              <b>Status:</b> ${esc(a.status||'New')}
-            </div>
-
-            ${a.note?`
-              <div class="co" style="margin-top:6px">
-                <b>Candidate note:</b> ${esc(a.note)}
-              </div>
-            `:''}
-
-            ${a.created_at?`
-              <div class="co" style="margin-top:5px">
-                Applied: ${esc(new Date(a.created_at).toLocaleString())}
-              </div>
-            `:''}
-
-          </div>
-
-          <div style="min-width:140px">
-            ${a.has_resume===true || a.has_resume==='true'
-              ? `
-                <a class="btn pri sm"
-                   href="${API}/resume?applicationId=${encodeURIComponent(a.id)}"
-                   target="_blank"
-                   rel="noopener">
-                  View resume
-                </a>
-
-                <div class="co" style="margin-top:7px">
-                  ${esc(a.original_filename||'Resume attached')}
-                </div>
-              `
-              : '<span class="co">No resume linked</span>'
-            }
-          </div>
-
-        </div>
-      `).join('')
-      : '<p class="co" style="padding:16px 0">No applications received yet.</p>';
-
+    const r = await api('applications');
+    applicationData = r.applications || [];
+    applicationPage = 1;
+    renderApplications();
   } catch(e) {
     console.error('Applications loading error:',e);
-
-    box.innerHTML=`
-      <p class="co">
-        Unable to load applications: ${esc(e.message)}
-      </p>`;
+    box.innerHTML = `<p class="co">Unable to load applications: ${esc(e.message)}</p>`;
   }
 }
 

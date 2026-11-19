@@ -20,6 +20,7 @@ function number(value, min = 0, max = 10000000) {
 function normalize(row) {
   return {
     id: row.id,
+    owner_user_id: row.owner_user_id,
     title: row.title,
     company: row.company,
     street: row.street,
@@ -149,6 +150,39 @@ export default async (request) => {
         message: "Job created successfully.",
         job: normalize(result.rows[0])
       }, 201);
+    }
+
+    if (method === "PATCH") {
+      const url = new URL(request.url);
+      const id = url.searchParams.get("id");
+      if (!id || !/^\\d+$/.test(id)) {
+        return json({ success: false, message: "Valid job ID required." }, 400);
+      }
+
+      const body = await readBody(request);
+      const status = body?.status;
+      if (!["active", "closed"].includes(status)) {
+        return json({ success: false, message: "Invalid job status." }, 400);
+      }
+
+      const result = await pool.query(
+        `UPDATE jobs
+         SET status = $1
+         WHERE id = $2
+           AND ($3::boolean OR owner_user_id = $4)
+         RETURNING id, status`,
+        [status, id, user.role === "super_admin", user.id]
+      );
+
+      if (!result.rowCount) {
+        return json({ success: false, message: "Job not found or access denied." }, 404);
+      }
+
+      return json({
+        success: true,
+        message: status === "closed" ? "Job closed." : "Job reopened.",
+        job: result.rows[0]
+      });
     }
 
     if (method === "PUT" || method === "DELETE") {

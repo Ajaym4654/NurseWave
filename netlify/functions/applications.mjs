@@ -49,11 +49,19 @@ export default async (request) => {
                a.candidate_phone AS phone,
                a.nursing_license AS license,
                j.title AS job_title,
+               j.city AS job_city,
+               j.state AS job_state,
                r.original_filename,
                (r.storage_key IS NOT NULL) AS has_resume
              FROM applications a
              JOIN jobs j ON j.id = a.job_id
-             LEFT JOIN resumes r ON r.application_id = a.id
+             LEFT JOIN LATERAL (
+               SELECT original_filename, storage_key
+               FROM resumes
+               WHERE application_id = a.id
+               ORDER BY created_at DESC NULLS LAST
+               LIMIT 1
+             ) r ON true
              ORDER BY a.created_at DESC`
           )
         : await pool.query(
@@ -64,11 +72,19 @@ export default async (request) => {
                a.candidate_phone AS phone,
                a.nursing_license AS license,
                j.title AS job_title,
+               j.city AS job_city,
+               j.state AS job_state,
                r.original_filename,
                (r.storage_key IS NOT NULL) AS has_resume
              FROM applications a
              JOIN jobs j ON j.id = a.job_id
-             LEFT JOIN resumes r ON r.application_id = a.id
+             LEFT JOIN LATERAL (
+               SELECT original_filename, storage_key
+               FROM resumes
+               WHERE application_id = a.id
+               ORDER BY created_at DESC NULLS LAST
+               LIMIT 1
+             ) r ON true
              WHERE a.employer_id = $1
              ORDER BY a.created_at DESC`,
             [user.id]

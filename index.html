@@ -521,6 +521,7 @@ function render() {
 
         <span>
           <button class="btn sm" data-edit="${esc(j.id)}">Edit</button>
+          <button class="btn sm ${j.status==='closed'?'lime':'danger'}" data-toggle-job="${esc(j.id)}" data-next-status="${j.status==='closed'?'active':'closed'}">${j.status==='closed'?'Reopen':'Close Job'}</button>
           <button class="btn sm danger" data-del="${esc(j.id)}">Delete</button>
         </span>
       </div>
@@ -583,6 +584,24 @@ document.addEventListener('click',async e=>{
 
   if (t.dataset.edit) {
     openPost(t.dataset.edit);
+    return;
+  }
+  if (t.dataset.toggleJob) {
+    const jobId = t.dataset.toggleJob;
+    const nextStatus = t.dataset.nextStatus;
+    const label = nextStatus === 'closed' ? 'close' : 'reopen';
+    if (confirm(`Are you sure you want to ${label} this job?`)) {
+      try {
+        await api(`jobs?id=${encodeURIComponent(jobId)}`, {
+          method:'PATCH',
+          body:JSON.stringify({status:nextStatus})
+        });
+        toast(nextStatus === 'closed' ? 'Job closed' : 'Job reopened');
+        await load();
+      } catch(error) {
+        toast(error.message);
+      }
+    }
     return;
   }
 

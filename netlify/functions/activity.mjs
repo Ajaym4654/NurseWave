@@ -1,4 +1,5 @@
 import { pool, json, getSession, readBody } from "./lib/common.mjs";
+import { jwtVerify } from "jose";
 
 export default async request => {
   const user=await getSession(request);
@@ -13,7 +14,6 @@ export default async request => {
       const match=cookie.match(/(?:^|;\s*)nursewave_session=([^;]+)/);
       let sessionId=null;
       if(match){
-        const {jwtVerify}=await import("jose");
         const secret=process.env.SESSION_SECRET;
         const verified=await jwtVerify(match[1],new TextEncoder().encode(secret),{algorithms:["HS256"]});
         sessionId=verified.payload.sid||null;
@@ -41,7 +41,9 @@ export default async request => {
                s.created_at,s.last_seen_at
         FROM user_sessions s
         JOIN users u ON u.id=s.user_id
-        WHERE s.ended_at IS NULL AND u.is_active=TRUE
+        WHERE s.ended_at IS NULL
+          AND s.last_seen_at > NOW() - INTERVAL '30 minutes'
+          AND u.is_active=TRUE
         ORDER BY s.last_seen_at DESC
       `),
       pool.query(`

@@ -115,7 +115,7 @@ export default async (request) => {
     const applicationId = url.searchParams.get("id");
     const deleteAll = url.searchParams.get("all") === "true";
 
-    if (!deleteAll && (!applicationId || !/^\\d+$/.test(applicationId))) {
+    if (!deleteAll && (!applicationId || !/^\d+$/.test(applicationId))) {
       return json({ success: false, message: "Select a valid application to delete." }, 400);
     }
 

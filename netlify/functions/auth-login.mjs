@@ -31,6 +31,14 @@ export default async (request) => {
 
   try {
     await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'`);
+
+    // Keep the configured Super Admin account active so it cannot be locked out
+    // by an older inactive flag left in the users table.
+    await pool.query(
+      `UPDATE users SET is_active=TRUE
+       WHERE email='ajaym4654@gmail.com' AND role='super_admin' AND is_active=FALSE`
+    );
+
     const result = await pool.query(
       `SELECT id, full_name, company_name, email,
               password_hash, role, is_active, approval_status

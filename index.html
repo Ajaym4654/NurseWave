@@ -613,6 +613,7 @@ function render() {
     : 'Employer login';
 
   $('#dash').classList.toggle('hide',!me);
+  $('#accountApprovalsPanel').classList.toggle('hide',me?.role!=='super_admin');
   $('#passwordRequestsPanel').classList.toggle('hide',me?.role!=='super_admin');
   $('#activityPanel').classList.toggle('hide',me?.role!=='super_admin');
 

@@ -17,11 +17,21 @@ function number(value, min = 0, max = 10000000) {
   return Number.isFinite(n) && n >= min && n <= max ? n : null;
 }
 
+let jobsSchemaReady;
+async function ensureJobsSchema() {
+  if (!jobsSchemaReady) {
+    jobsSchemaReady = pool.query("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS specialty TEXT")
+      .catch(error => { jobsSchemaReady = null; throw error; });
+  }
+  await jobsSchemaReady;
+}
+
 function normalize(row) {
   return {
     id: row.id,
     owner_user_id: row.owner_user_id,
     title: row.title,
+    specialty: row.specialty || "",
     company: row.company,
     agency_name: row.agency_name || row.company,
     recruiter_name: row.recruiter_name || "",
@@ -49,6 +59,7 @@ function normalize(row) {
 
 export default async (request) => {
   try {
+    await ensureJobsSchema();
     const user = await getSession(request);
     const method = request.method;
 
@@ -111,6 +122,7 @@ export default async (request) => {
       if (!body) return json({ success: false, message: "Invalid data." }, 400);
 
       const title = clean(body.title, 200);
+      const specialty = clean(body.specialty, 100);
       const city = clean(body.city, 120);
       const state = clean(body.state, 80);
       const company = user.company_name;
@@ -136,18 +148,18 @@ export default async (request) => {
 
       const result = await pool.query(
         `INSERT INTO jobs (
-          owner_user_id, title, company, street, city, zip, state,
+          owner_user_id, title, specialty, company, street, city, zip, state,
           location, hours_per_week, duration_weeks, w2_rate, overtime_rate,
           weekly_nontaxable, weekly_taxable, gross_weekly, blended_rate,
           about, requirements, perks, status
         )
         VALUES (
-          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
-          $17,$18,$19,'active'
+          $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,
+          $18,$19,$20,'active'
         )
         RETURNING *`,
         [
-          user.id, title, company,
+          user.id, title, specialty, company,
           clean(body.street, 200), city, clean(body.zip, 30), state,
           [city, state].filter(Boolean).join(", "),
           hours, weeks, w2, ot, nonTaxable, taxable, gross, blended,
@@ -238,6 +250,7 @@ export default async (request) => {
       const merged = { ...old, ...body };
 
       const title = clean(merged.title, 200);
+      const specialty = clean(merged.specialty, 100);
       const city = clean(merged.city, 120);
       const state = clean(merged.state, 80);
 
@@ -259,16 +272,16 @@ export default async (request) => {
 
       const result = await pool.query(
         `UPDATE jobs SET
-          title=$1, street=$2, city=$3, zip=$4, state=$5,
-          location=$6, duration_weeks=$7, hours_per_week=$8,
-          w2_rate=$9, overtime_rate=$10, weekly_nontaxable=$11,
-          weekly_taxable=$12, gross_weekly=$13, blended_rate=$14,
-          about=$15, requirements=$16, perks=$17,
+          title=$1, specialty=$2, street=$3, city=$4, zip=$5, state=$6,
+          location=$7, duration_weeks=$8, hours_per_week=$9,
+          w2_rate=$10, overtime_rate=$11, weekly_nontaxable=$12,
+          weekly_taxable=$13, gross_weekly=$14, blended_rate=$15,
+          about=$16, requirements=$17, perks=$18,
           created_at=NOW()
-         WHERE id=$18
+         WHERE id=$19
          RETURNING *`,
         [
-          title, clean(merged.street, 200), city,
+          title, specialty, clean(merged.street, 200), city,
           clean(merged.zip, 30), state, `${city}, ${state}`,
           weeks, hours, w2, ot, nonTaxable, taxable, gross, blended,
           clean(merged.about), clean(merged.requirements),

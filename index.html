@@ -944,6 +944,7 @@ function renderApplications() {
   const toolbar = `
     <div class="app-toolbar">
       <input id="appSearch" type="search" value="${esc(search)}" placeholder="Search name, phone, email, job or license" aria-label="Search applications">
+      ${me?.role==='super_admin' && applicationData.length ? '<button class="btn sm danger" type="button" id="deleteAllApplications">Delete All Applications</button>' : ''}
       <select id="appJobFilter" aria-label="Filter by job">
         ${option('',jobFilter,'All jobs')}${jobsList.map(x=>option(x,jobFilter)).join('')}
       </select>
@@ -977,7 +978,7 @@ function renderApplications() {
   const table = pageRows.length ? `
     <div class="app-table-wrap">
       <table class="app-table">
-        <thead><tr><th>#</th><th>Candidate Name</th><th>Phone</th><th>Email</th><th>Job Position</th><th>License</th><th>State</th><th>Status</th><th>Applied Date</th><th>Resume</th></tr></thead>
+        <thead><tr><th>#</th><th>Candidate Name</th><th>Phone</th><th>Email</th><th>Job Position</th><th>License</th><th>State</th><th>Status</th><th>Applied Date</th><th>Resume</th>${me?.role==='super_admin'?'<th>Action</th>':''}</tr></thead>
         <tbody>${pageRows.map((a,i)=>`
           <tr>
             <td>${from+i+1}</td>
@@ -991,7 +992,9 @@ function renderApplications() {
             <td>${esc(applicationDate(a.created_at))}</td>
             <td>${a.has_resume===true || a.has_resume==='true'
               ? `<a class="resume-link" href="${API}/resume?applicationId=${encodeURIComponent(a.id)}" target="_blank" rel="noopener">${esc(a.original_filename||'View resume')}</a>`
-              : '<span class="co">Not linked</span>'}</td>
+              : '<span class="co">Not linked</span>'}
+            </td>
+            ${me?.role==='super_admin'? `<td><button class="btn sm danger" type="button" data-app-delete="${esc(a.id)}">Delete</button></td>` : ''}
           </tr>`).join('')}</tbody>
       </table>
     </div>` : '<div class="app-empty">No applications match your search or filters.</div>';
@@ -1004,6 +1007,35 @@ function renderApplications() {
         <button class="btn sm" type="button" data-app-page="next" ${applicationPage>=pageCount?'disabled':''}>Next</button>
       </div>
     </div>`;
+
+  $('#deleteAllApplications')?.addEventListener('click', async () => {
+    if (!confirm('Permanently delete ALL applications and their uploaded resumes? This cannot be undone.')) return;
+    try {
+      const result = await api('applications?all=true', {method:'DELETE'});
+      applicationData = [];
+      applicationPage = 1;
+      renderApplications();
+      toast(result.message || 'All applications deleted');
+    } catch(error) {
+      toast(error.message);
+    }
+  });
+
+  box.querySelectorAll('[data-app-delete]').forEach(button => {
+    button.addEventListener('click', async () => {
+      const application = applicationData.find(a => String(a.id) === String(button.dataset.appDelete));
+      const candidate = application?.candidate_name || application?.name || 'this candidate';
+      if (!confirm('Permanently delete the application and uploaded resume for ' + candidate + '?')) return;
+      try {
+        const result = await api('applications?id=' + encodeURIComponent(button.dataset.appDelete), {method:'DELETE'});
+        applicationData = applicationData.filter(a => String(a.id) !== String(button.dataset.appDelete));
+        renderApplications();
+        toast(result.message || 'Application deleted');
+      } catch(error) {
+        toast(error.message);
+      }
+    });
+  });
 
   $('#appSearch').addEventListener('input', () => {
     applicationPage = 1;

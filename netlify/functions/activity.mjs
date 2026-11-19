@@ -1,11 +1,38 @@
-import { pool, json, getSession } from "./lib/common.mjs";
+import { pool, json, getSession, readBody } from "./lib/common.mjs";
 
 export default async request => {
-  if (request.method !== "GET") return json({success:false,message:"Method not allowed."},405);
-  const admin=await getSession(request);
-  if (!admin || admin.role!=="super_admin") {
-    return json({success:false,message:"Super Admin access required."},403);
+  const user=await getSession(request);
+  if (!user) return json({success:false,message:"Login required."},401);
+
+  if(request.method==="POST"){
+    const body=await readBody(request);
+    const action=String(body?.action||"").slice(0,120);
+    if(!action) return json({success:false,message:"Activity name is required."},400);
+    try{
+      const cookie=request.headers.get("cookie")||"";
+      const match=cookie.match(/(?:^|;\s*)nursewave_session=([^;]+)/);
+      let sessionId=null;
+      if(match){
+        const {jwtVerify}=await import("jose");
+        const secret=process.env.SESSION_SECRET;
+        const verified=await jwtVerify(match[1],new TextEncoder().encode(secret),{algorithms:["HS256"]});
+        sessionId=verified.payload.sid||null;
+      }
+      const forwarded=request.headers.get("x-nf-client-connection-ip")||request.headers.get("x-forwarded-for")||"";
+      const ip=forwarded.split(",")[0].trim()||null;
+      await pool.query(
+        "INSERT INTO activity_logs (user_id,session_id,event_type,ip_address,user_agent,details) VALUES ($1,$2,'action',$3,$4,$5)",
+        [user.id,sessionId,ip,request.headers.get("user-agent")||null,JSON.stringify({action})]
+      );
+      return json({success:true});
+    }catch(error){
+      console.error("Activity write error:",error);
+      return json({success:false,message:"Unable to record activity."},500);
+    }
   }
+
+  if(request.method!=="GET") return json({success:false,message:"Method not allowed."},405);
+  if(user.role!=="super_admin") return json({success:false,message:"Super Admin access required."},403);
   try {
     const [sessions,logs]=await Promise.all([
       pool.query(`

@@ -30,22 +30,42 @@ const ALLOWED_TYPES = [
 export default async (request) => {
   const user = await getSession(request);
 
+  // GET APPLICATIONS
   if (request.method === "GET") {
     if (!user) {
-      return json({ success: false, message: "Please log in first." }, 401);
+      return json({
+        success: false,
+        message: "Please log in first."
+      }, 401);
     }
 
     try {
       const result = user.role === "super_admin"
         ? await pool.query(
-            `SELECT a.*, j.title AS job_title, r.original_filename
+            `SELECT
+               a.*,
+               a.candidate_name AS name,
+               a.candidate_email AS email,
+               a.candidate_phone AS phone,
+               a.nursing_license AS license,
+               j.title AS job_title,
+               r.original_filename,
+               (r.storage_key IS NOT NULL) AS has_resume
              FROM applications a
              JOIN jobs j ON j.id = a.job_id
              LEFT JOIN resumes r ON r.application_id = a.id
              ORDER BY a.created_at DESC`
           )
         : await pool.query(
-            `SELECT a.*, j.title AS job_title, r.original_filename
+            `SELECT
+               a.*,
+               a.candidate_name AS name,
+               a.candidate_email AS email,
+               a.candidate_phone AS phone,
+               a.nursing_license AS license,
+               j.title AS job_title,
+               r.original_filename,
+               (r.storage_key IS NOT NULL) AS has_resume
              FROM applications a
              JOIN jobs j ON j.id = a.job_id
              LEFT JOIN resumes r ON r.application_id = a.id
@@ -58,8 +78,10 @@ export default async (request) => {
         success: true,
         applications: result.rows
       });
+
     } catch (error) {
       console.error("Applications fetch error:", error);
+
       return json({
         success: false,
         message: "Unable to load applications."
@@ -67,8 +89,12 @@ export default async (request) => {
     }
   }
 
+  // ONLY POST IS ALLOWED AFTER GET
   if (request.method !== "POST") {
-    return json({ success: false, message: "Method not allowed." }, 405);
+    return json({
+      success: false,
+      message: "Method not allowed."
+    }, 405);
   }
 
   let uploadedPath = null;
@@ -85,7 +111,10 @@ export default async (request) => {
     const file = form.get("resume");
 
     if (!/^\d+$/.test(jobId)) {
-      return json({ success: false, message: "Invalid job." }, 400);
+      return json({
+        success: false,
+        message: "Invalid job."
+      }, 400);
     }
 
     if (
@@ -106,15 +135,24 @@ export default async (request) => {
       nursingLicense.length > 150 ||
       note.length > 5000
     ) {
-      return json({ success: false, message: "Some application fields are too long." }, 400);
+      return json({
+        success: false,
+        message: "Some application fields are too long."
+      }, 400);
     }
 
     if (!file || typeof file.arrayBuffer !== "function") {
-      return json({ success: false, message: "Please attach your resume." }, 400);
+      return json({
+        success: false,
+        message: "Please attach your resume."
+      }, 400);
     }
 
     if (file.size <= 0 || file.size > MAX_SIZE) {
-      return json({ success: false, message: "Resume must be under 5 MB." }, 400);
+      return json({
+        success: false,
+        message: "Resume must be under 5 MB."
+      }, 400);
     }
 
     if (!ALLOWED_TYPES.includes(file.type)) {
@@ -124,6 +162,7 @@ export default async (request) => {
       }, 400);
     }
 
+    // CHECK JOB
     const jobResult = await pool.query(
       `SELECT id, owner_user_id
        FROM jobs
@@ -132,11 +171,15 @@ export default async (request) => {
     );
 
     if (!jobResult.rowCount) {
-      return json({ success: false, message: "This job is no longer available." }, 404);
+      return json({
+        success: false,
+        message: "This job is no longer available."
+      }, 404);
     }
 
     const employerId = jobResult.rows[0].owner_user_id;
 
+    // SAFE FILE NAME
     const safeName = String(file.name || "resume")
       .replace(/[^a-zA-Z0-9._-]/g, "_")
       .slice(-100);
@@ -144,6 +187,7 @@ export default async (request) => {
     const storageKey = `${jobId}/${randomUUID()}-${safeName}`;
     const fileBuffer = Buffer.from(await file.arrayBuffer());
 
+    // UPLOAD RESUME TO SUPABASE STORAGE
     const upload = await supabase.storage
       .from(BUCKET)
       .upload(storageKey, fileBuffer, {
@@ -153,6 +197,7 @@ export default async (request) => {
 
     if (upload.error) {
       console.error("Resume upload error:", upload.error);
+
       return json({
         success: false,
         message: "Resume upload failed. Please try again."
@@ -166,11 +211,16 @@ export default async (request) => {
     try {
       await client.query("BEGIN");
 
+      // SAVE APPLICATION DETAILS
       const application = await client.query(
         `INSERT INTO applications (
-          job_id, employer_id, candidate_name,
-          candidate_email, candidate_phone,
-          nursing_license, note
+          job_id,
+          employer_id,
+          candidate_name,
+          candidate_email,
+          candidate_phone,
+          nursing_license,
+          note
         )
         VALUES ($1,$2,$3,$4,$5,$6,$7)
         RETURNING id`,
@@ -187,10 +237,14 @@ export default async (request) => {
 
       const applicationId = application.rows[0].id;
 
+      // LINK RESUME TO APPLICATION
       await client.query(
         `INSERT INTO resumes (
-          application_id, storage_key,
-          original_filename, mime_type, file_size
+          application_id,
+          storage_key,
+          original_filename,
+          mime_type,
+          file_size
         )
         VALUES ($1,$2,$3,$4,$5)`,
         [
@@ -204,6 +258,8 @@ export default async (request) => {
 
       await client.query("COMMIT");
 
+      uploadedPath = null;
+
       return json({
         success: true,
         message: "Application submitted successfully."
@@ -212,6 +268,7 @@ export default async (request) => {
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
+
     } finally {
       client.release();
     }
@@ -219,6 +276,7 @@ export default async (request) => {
   } catch (error) {
     console.error("Application submission error:", error);
 
+    // REMOVE UPLOADED FILE IF DATABASE SAVE FAILED
     if (uploadedPath) {
       const { error: cleanupError } = await supabase.storage
         .from(BUCKET)

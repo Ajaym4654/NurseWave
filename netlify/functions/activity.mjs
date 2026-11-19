@@ -34,9 +34,22 @@ export default async request => {
   if(request.method!=="GET") return json({success:false,message:"Method not allowed."},405);
   if(user.role!=="super_admin") return json({success:false,message:"Super Admin access required."},403);
   try {
+    // Keep the activity history limited to the latest 48 hours.
+    await pool.query(`
+      DELETE FROM activity_logs
+      WHERE created_at < NOW() - INTERVAL '48 hours'
+    `);
+    // Remove expired session rows so abandoned sessions do not accumulate.
+    await pool.query(`
+      DELETE FROM user_sessions
+      WHERE (ended_at IS NOT NULL AND ended_at < NOW() - INTERVAL '48 hours')
+         OR (ended_at IS NULL AND last_seen_at < NOW() - INTERVAL '30 minutes')
+    `);
+
     const [sessions,logs]=await Promise.all([
       pool.query(`
-        SELECT s.session_id,s.user_id,u.full_name,u.email,u.role,
+        SELECT DISTINCT ON (s.user_id,s.ip_address,s.user_agent)
+               s.session_id,s.user_id,u.full_name,u.email,u.role,
                s.ip_address,s.user_agent,s.device_label,
                s.created_at,s.last_seen_at
         FROM user_sessions s
@@ -44,13 +57,14 @@ export default async request => {
         WHERE s.ended_at IS NULL
           AND s.last_seen_at > NOW() - INTERVAL '30 minutes'
           AND u.is_active=TRUE
-        ORDER BY s.last_seen_at DESC
+        ORDER BY s.user_id,s.ip_address,s.user_agent,s.last_seen_at DESC
       `),
       pool.query(`
         SELECT l.id,l.user_id,u.full_name,u.email,u.role,l.session_id,
                l.event_type,l.ip_address,l.user_agent,l.details,l.created_at
         FROM activity_logs l
         LEFT JOIN users u ON u.id=l.user_id
+        WHERE l.created_at >= NOW() - INTERVAL '48 hours'
         ORDER BY l.created_at DESC
         LIMIT 500
       `)

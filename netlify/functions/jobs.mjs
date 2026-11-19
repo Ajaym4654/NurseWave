@@ -263,7 +263,8 @@ export default async (request) => {
           location=$6, duration_weeks=$7, hours_per_week=$8,
           w2_rate=$9, overtime_rate=$10, weekly_nontaxable=$11,
           weekly_taxable=$12, gross_weekly=$13, blended_rate=$14,
-          about=$15, requirements=$16, perks=$17
+          about=$15, requirements=$16, perks=$17,
+          created_at=NOW()
          WHERE id=$18
          RETURNING *`,
         [

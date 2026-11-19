@@ -357,6 +357,10 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
           </select>
         </label>
 
+        <label>Specialty
+          <input name="specialty" type="text" maxlength="100" placeholder="e.g. ER, Med-Surg, ICU, PCU, Telemetry, LTC">
+        </label>
+
         <label>Hours per week
           <select name="hrs">
             <option>36</option>
@@ -601,6 +605,7 @@ function render() {
           </div>
           <div>
             <h3>${esc(j.title)}</h3>
+            ${j.specialty?`<div class="co"><b>Specialty:</b> ${esc(j.specialty)}</div>`:''}
             <div class="co">${esc(j.company)} · ${esc(j.loc)}</div>
           </div>
         </div>
@@ -681,6 +686,7 @@ function openJob(id) {
     <div class="fact"><small>Pay rate (hourly)</small><b>${usd(j.blend)}/hr</b></div>
     <div class="fact"><small>Duration</small>${j.weeks} weeks</div>
     <div class="fact"><small>Hours per week</small>${j.hrs}</div>
+    ${j.specialty?`<div class="fact"><small>Specialty</small>${esc(j.specialty)}</div>`:''}
     ${j.openings>1?`<div class="fact"><small>Openings</small>${j.openings}</div>`:''}`;
 
   $('#jBody').innerHTML = `
@@ -973,6 +979,7 @@ function openPost(id) {
 
     const v = {
       title:j.title,
+      specialty:j.specialty||'',
       hrs:j.hrs,
       addr:j.street||j.addr,
       city:j.city,
@@ -1006,6 +1013,7 @@ $('#postForm').onsubmit=async e=>{
 
   const body={
     title:f.title,
+    specialty:f.specialty.trim(),
     street:f.addr,
     city:f.city,
     zip:f.zip,

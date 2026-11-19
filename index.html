@@ -1545,11 +1545,6 @@ function renderActiveDevices(){
   });
 }
 
-let agencyData = [];
-let agencyPage = 1;
-const AGENCIES_PER_PAGE = 10;
-const expandedAgencies = new Set();
-
 async function loadAgencies(){
   if(!me || me.role!=='super_admin') return;
   const box=$('#agencies');

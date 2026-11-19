@@ -30,9 +30,10 @@ export default async (request) => {
   }
 
   try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved'`);
     const result = await pool.query(
       `SELECT id, full_name, company_name, email,
-              password_hash, role, is_active
+              password_hash, role, is_active, approval_status
        FROM users
        WHERE email = $1
        LIMIT 1`,
@@ -40,6 +41,13 @@ export default async (request) => {
     );
 
     const user = result.rows[0];
+
+    if (user?.role === "employer" && user.approval_status === "pending") {
+      return json({ success:false, message:"Your account is waiting for Super Admin approval. Please try again after approval." }, 403);
+    }
+    if (user?.role === "employer" && user.approval_status === "denied") {
+      return json({ success:false, message:"Your account approval was denied. Please contact the Super Admin at ajaym4654@gmail.com." }, 403);
+    }
 
     if (
       !user ||

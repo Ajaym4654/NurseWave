@@ -140,6 +140,13 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
   <h2 style="font-size:26px" id="dashTitle">Your employer dashboard</h2>
   <div id="mine"></div>
 
+  <section id="accountApprovalsPanel" class="hide" style="margin-top:28px">
+    <button class="btn" type="button" id="accountApprovalsToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Employer Account Approvals</button>
+    <div id="accountApprovalsContent" class="hide" style="margin-top:14px">
+      <p class="co">Review new employer registrations. Allow accounts to activate login access or deny the request.</p>
+      <div id="accountApprovals"><p class="co">Loading accounts…</p></div>
+    </div>
+  </section>
   <section id="passwordRequestsPanel" class="hide" style="margin-top:28px">
     <button class="btn" type="button" id="passwordRequestsToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Password Reset Requests</button>
     <div id="passwordRequestsContent" class="hide" style="margin-top:14px">
@@ -268,6 +275,17 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
   </div>
 </dialog>
 
+<!-- ACCOUNT APPROVAL WAITING -->
+<dialog id="approvalWaitDlg" class="success-dialog" aria-labelledby="approvalWaitTitle">
+  <div class="success-inner">
+    <div class="success-icon" aria-hidden="true">✓</div>
+    <h2 id="approvalWaitTitle">Thanks for registering!</h2>
+    <p>Your employer account has been created successfully.</p>
+    <div class="success-note"><b>Waiting for Approval</b><br>Our Super Admin will review your account. You can log in once your account is approved.</div>
+    <button class="btn pri" type="button" id="approvalWaitDone" style="margin-top:12px">Got it</button>
+  </div>
+</dialog>
+
 <!-- PASSWORD RESET REQUEST / SET NEW PASSWORD -->
 <dialog id="passwordDlg">
   <div class="dh">
@@ -282,6 +300,7 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
       </label>
       <button class="btn pri" style="margin-top:16px" type="submit">Submit request</button>
       <div class="msg hide" id="passwordRequestMsg"></div>
+      <div id="passwordContactNote" class="success-note hide">If your password reset request is taking longer than expected, kindly email the Super Admin at <a href="mailto:ajaym4654@gmail.com"><b>ajaym4654@gmail.com</b></a>.</div>
     </form>
     <form id="passwordCompleteForm" class="hide">
       <p class="co">Choose a new password for your NurseWave employer account.</p>
@@ -503,6 +522,7 @@ async function load() {
       await loadApplications();
       if (me.role==='super_admin') {
         await loadPasswordRequests();
+        await loadAccountApprovals();
         await loadActivity();
       }
     } else {
@@ -785,6 +805,7 @@ $('#authBtn').onclick=async()=>{
 };
 
 $('#authSwap').onclick=()=>setAuth(!signup);
+$('#approvalWaitDone').onclick=()=>$('#approvalWaitDlg').close();
 
 $('#forgotPasswordBtn').onclick=()=>{
   $('#authDlg').close();
@@ -792,6 +813,7 @@ $('#forgotPasswordBtn').onclick=()=>{
   $('#passwordCompleteForm').classList.add('hide');
   $('#passwordDlgTitle').textContent='Request password reset';
   $('#passwordRequestMsg').classList.add('hide');
+  $('#passwordContactNote').classList.add('hide');
   $('#passwordDlg').showModal();
 };
 
@@ -805,7 +827,8 @@ $('#passwordRequestForm').onsubmit=async e=>{
       method:'POST',
       body:JSON.stringify({action:'request',email:$('#resetRequestEmail').value.trim()})
     });
-    msg.textContent=result.message;
+    msg.textContent='Your password reset request has been submitted. The Super Admin will review it and generate a secure reset link.';
+    $('#passwordContactNote').classList.remove('hide');
     e.target.reset();
   } catch(error) {
     msg.textContent=error.message;
@@ -863,6 +886,13 @@ $('#authForm').onsubmit=async e=>{
         })
       }
     );
+
+    if (result.pending_approval) {
+      $('#authDlg').close();
+      e.target.reset();
+      $('#approvalWaitDlg').showModal();
+      return;
+    }
 
     me = result.user;
 
@@ -1205,6 +1235,60 @@ async function loadApplications() {
   }
 }
 
+async function loadAccountApprovals() {
+  const panel=$('#accountApprovals');
+  if(!me || me.role!=='super_admin') return;
+  panel.innerHTML='<p class="co">Loading accounts…</p>';
+  try {
+    const result=await api('admin-accounts');
+    accountApprovalData=result.accounts||[];
+    renderAccountApprovals();
+  } catch(error) {
+    panel.innerHTML=`<p class="co">Unable to load accounts: ${esc(error.message)}</p>`;
+  }
+}
+
+let accountApprovalData=[];
+
+function renderAccountApprovals() {
+  const panel=$('#accountApprovals');
+  const pending=accountApprovalData.filter(a=>a.approval_status==='pending');
+  panel.innerHTML=pending.length?pending.map(a=>`
+    <div class="mine">
+      <span>
+        <b>${esc(a.full_name||'Employer')}</b>
+        <span class="co">${esc(a.email)} · ${esc(a.company_name||'')}</span>
+        <span class="co">Registered: ${esc(applicationDate(a.created_at))} · <b>Pending Approval</b></span>
+      </span>
+      <span style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn sm pri" type="button" data-account-allow="${esc(a.id)}">Allow</button>
+        <button class="btn sm danger" type="button" data-account-deny="${esc(a.id)}">Deny</button>
+      </span>
+    </div>`).join(''):'<div class="app-empty">No employer accounts are waiting for approval.</div>';
+
+  panel.querySelectorAll('[data-account-allow],[data-account-deny]').forEach(button=>{
+    button.addEventListener('click',async()=>{
+      const action=button.hasAttribute('data-account-allow')?'allow':'deny';
+      const userId=Number(button.dataset.accountAllow||button.dataset.accountDeny);
+      const account=accountApprovalData.find(a=>Number(a.id)===userId);
+      if(!account) return;
+      if(action==='deny' && !confirm('Deny this employer account?')) return;
+      button.disabled=true;
+      try {
+        const result=await api('admin-accounts',{
+          method:'POST',
+          body:JSON.stringify({action,user_id:userId})
+        });
+        toast(result.message);
+        await loadAccountApprovals();
+      } catch(error) {
+        toast(error.message);
+        button.disabled=false;
+      }
+    });
+  });
+}
+
 async function loadPasswordRequests() {
   const panel=$('#passwordRequests');
   if(!me || me.role!=='super_admin') return;
@@ -1386,6 +1470,7 @@ function setupDashboardToggle(buttonId,contentId,label) {
     button.textContent=(opening?'− ':'＋ ')+label;
   });
 }
+setupDashboardToggle('accountApprovalsToggle','accountApprovalsContent','Employer Account Approvals');
 setupDashboardToggle('passwordRequestsToggle','passwordRequestsContent','Password Reset Requests');
 setupDashboardToggle('activityToggle','activityContent','Activity Log & Active Devices');
 setupDashboardToggle('applicationsToggle','applicationsContent','Applications & resumes');

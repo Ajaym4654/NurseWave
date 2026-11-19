@@ -1403,7 +1403,22 @@ async function loadActivity(){
   $('#activeDeviceSummary').innerHTML='<p class="co">Loading active devices…</p>';
   try{
     const result=await api('activity');
-    activeSessionData=result.active_sessions||[];
+    // Safety de-duplication: one physical browser/device should appear once,
+    // even if the API returns multiple active session rows for the same identity.
+    const sessions=result.active_sessions||[];
+    const uniqueDevices=new Map();
+    sessions.forEach(session=>{
+      const identity=[
+        String(session.user_id??''),
+        String(session.ip_address??'').trim().toLowerCase(),
+        String(session.user_agent??'').trim().replace(/\\s+/g,' ').toLowerCase()
+      ].join('|');
+      const existing=uniqueDevices.get(identity);
+      if(!existing || new Date(session.last_seen_at||0)>new Date(existing.last_seen_at||0)){
+        uniqueDevices.set(identity,session);
+      }
+    });
+    activeSessionData=[...uniqueDevices.values()];
     activityData=result.activities||[];
     activeDevicePage=1;
     activityPage=1;

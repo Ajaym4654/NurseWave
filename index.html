@@ -224,7 +224,11 @@ function render(){
  $('#sJobs').textContent=jobs.length;$('#sCo').textContent=new Set(jobs.map(j=>j.company)).size;
  $('#authBtn').textContent=me?`Log out (${me.company||me.full_name})`:'Employer login';
  $('#dash').classList.toggle('hide',!me);$('#dashTitle').textContent=me?.role==='super_admin'?'Super Admin Dashboard':'Your employer dashboard';
- const mine=me?.role==='super_admin'?jobs:jobs.filter(j=>String(j.owner_user_id)===String(me.id));
+ const mine = !me
+  ? []
+  : me.role === 'super_admin'
+    ? jobs
+    : jobs.filter(j => String(j.owner_user_id) === String(me.id));
  $('#mine').innerHTML=mine.length?mine.map(j=>`<div class="mine"><span><b>${esc(j.title)}</b> <span class="co">${esc(j.company)} · ${usd(j.gross)}/week</span></span><span><button class="btn sm" data-edit="${esc(j.id)}">Edit</button> <button class="btn sm danger" data-del="${esc(j.id)}">Delete</button></span></div>`).join(''):'<p class="co">No jobs posted yet. Click “Post a job” to add one.</p>';
 }
 function list(h,t){return lines(t).length?`<h4>${h}</h4><ul>${lines(t).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}

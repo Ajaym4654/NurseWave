@@ -126,7 +126,7 @@ export function clearSession() {
 
 export async function getSession(request) {
   const cookie = request.headers.get("cookie") || "";
-  const match = cookie.match(/(?:^|;\\s*)nursewave_session=([^;]+)/);
+  const match = cookie.match(/(?:^|;\s*)nursewave_session=([^;]+)/);
   if (!match) return null;
 
   try {
@@ -152,7 +152,7 @@ export async function getSession(request) {
 
 export async function endSession(request) {
   const cookie = request.headers.get("cookie") || "";
-  const match = cookie.match(/(?:^|;\\s*)nursewave_session=([^;]+)/);
+  const match = cookie.match(/(?:^|;\s*)nursewave_session=([^;]+)/);
   if (!match) return;
   try {
     const { payload } = await jwtVerify(match[1],getSecret(),{algorithms:["HS256"]});

@@ -105,6 +105,57 @@ export default async (request) => {
     }
   }
 
+  // DELETE APPLICATIONS — SUPER ADMIN ONLY
+  if (request.method === "DELETE") {
+    if (!user || user.role !== "super_admin") {
+      return json({ success: false, message: "Only Super Admin can delete applications." }, 403);
+    }
+
+    const url = new URL(request.url);
+    const applicationId = url.searchParams.get("id");
+    const deleteAll = url.searchParams.get("all") === "true";
+
+    if (!deleteAll && (!applicationId || !/^\\d+$/.test(applicationId))) {
+      return json({ success: false, message: "Select a valid application to delete." }, 400);
+    }
+
+    const client = await pool.connect();
+    let storageKeys = [];
+
+    try {
+      await client.query("BEGIN");
+      const selected = deleteAll
+        ? await client.query("SELECT id FROM applications")
+        : await client.query("SELECT id FROM applications WHERE id = $1", [applicationId]);
+
+      if (!deleteAll && !selected.rowCount) {
+        await client.query("ROLLBACK");
+        return json({ success: false, message: "Application not found." }, 404);
+      }
+
+      const ids = selected.rows.map(row => row.id);
+      if (ids.length) {
+        const resumes = await client.query("SELECT storage_key FROM resumes WHERE application_id = ANY($1)", [ids]);
+        storageKeys = resumes.rows.map(row => row.storage_key).filter(Boolean);
+        await client.query("DELETE FROM resumes WHERE application_id = ANY($1)", [ids]);
+        await client.query("DELETE FROM applications WHERE id = ANY($1)", [ids]);
+      }
+
+      await client.query("COMMIT");
+      if (storageKeys.length) {
+        const { error } = await supabase.storage.from(BUCKET).remove(storageKeys);
+        if (error) console.error("Deleted application resume cleanup error:", error);
+      }
+      return json({ success: true, deleted: ids.length, message: ids.length + " application(s) deleted." });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      console.error("Application delete error:", error);
+      return json({ success: false, message: "Unable to delete application(s)." }, 500);
+    } finally {
+      client.release();
+    }
+  }
+
   // ONLY POST IS ALLOWED AFTER GET
   if (request.method !== "POST") {
     return json({

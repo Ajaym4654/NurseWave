@@ -155,7 +155,7 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
     </div>
   </section>
   <section id="activityPanel" class="hide" style="margin-top:24px">
-    <button class="btn" type="button" id="activityToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Activity Log & Active Devices</button>
+    <button class="btn" type="button" id="activityToggle" aria-expanded="false" style="font-size:20px;font-weight:700">＋ Login & Activity History</button>
     <div id="activityContent" class="hide" style="margin-top:14px">
       <div id="activeDeviceSummary" class="co">Loading active devices…</div>
       <div id="activityLogs"><p class="co">Loading activity…</p></div>
@@ -497,8 +497,7 @@ function normaliseJob(j) {
     ot:Number(j.ot || j.overtime_rate || 0),
     nt:Number(j.nt || j.weekly_non_taxable || 0),
     tax:Number(j.tax || j.weekly_taxable || 0),
-    openings:Number(j.openings || 1),
-    date:j.date || j.created_at || new Date().toISOString()
+    openings:Number(j.openings || 1),    date:j.date || j.created_at || new Date().toISOString()
   };
 }
 
@@ -997,8 +996,7 @@ $('#postForm').onsubmit=async e=>{
     overtime_rate:0,
     weekly_non_taxable:+f.nt,
     weekly_taxable:+f.tax,
-    gross_weekly:+f.gross,
-    blended_rate:+f.payrate,
+    gross_weekly:+f.gross,    blended_rate:+f.payrate,
     about:f.about,
     requirements:f.reqs,
     perks:f.perks
@@ -1247,11 +1245,20 @@ async function loadAccountApprovals() {
 }
 
 let accountApprovalData=[];
+let accountApprovalPage=1;
+const ACCOUNT_APPROVALS_PER_PAGE=25;
 
 function renderAccountApprovals() {
   const panel=$('#accountApprovals');
-  const pending=accountApprovalData.filter(a=>a.approval_status==='pending');
-  panel.innerHTML=pending.length?pending.map(a=>`
+  const pending=accountApprovalData.filter(a=>a.approval_status==='pending')
+    .sort((a,b)=>new Date(b.created_at||0)-new Date(a.created_at||0));
+  const total=pending.length;
+  const pageCount=Math.max(1,Math.ceil(total/ACCOUNT_APPROVALS_PER_PAGE));
+  accountApprovalPage=Math.min(Math.max(1,accountApprovalPage),pageCount);
+  const from=total?(accountApprovalPage-1)*ACCOUNT_APPROVALS_PER_PAGE:0;
+  const to=Math.min(from+ACCOUNT_APPROVALS_PER_PAGE,total);
+  const rows=pending.slice(from,to);
+  panel.innerHTML=(rows.length?rows.map(a=>`
     <div class="mine">
       <span>
         <b>${esc(a.full_name||'Employer')}</b>
@@ -1262,7 +1269,14 @@ function renderAccountApprovals() {
         <button class="btn sm pri" type="button" data-account-allow="${esc(a.id)}">Allow</button>
         <button class="btn sm danger" type="button" data-account-deny="${esc(a.id)}">Deny</button>
       </span>
-    </div>`).join(''):'<div class="app-empty">No employer accounts are waiting for approval.</div>';
+    </div>`).join(''):'<div class="app-empty">No employer accounts are waiting for approval.</div>')+`
+    <div class="app-pagination">
+      <div class="app-count">Showing ${total?from+1:0}–${to} of ${total} pending accounts · Page ${accountApprovalPage} of ${pageCount}</div>
+      <div class="page-actions">
+        <button class="btn sm" type="button" data-account-page="prev" ${accountApprovalPage<=1?'disabled':''}>Previous</button>
+        <button class="btn sm" type="button" data-account-page="next" ${accountApprovalPage>=pageCount?'disabled':''}>Next</button>
+      </div>
+    </div>`;
 
   panel.querySelectorAll('[data-account-allow],[data-account-deny]').forEach(button=>{
     button.addEventListener('click',async()=>{
@@ -1283,6 +1297,12 @@ function renderAccountApprovals() {
         toast(error.message);
         button.disabled=false;
       }
+    });
+  });
+  panel.querySelectorAll('[data-account-page]').forEach(button=>{
+    button.addEventListener('click',()=>{
+      accountApprovalPage+=button.dataset.accountPage==='next'?1:-1;
+      renderAccountApprovals();
     });
   });
 }
@@ -1372,43 +1392,73 @@ function renderPasswordRequests(){
 let activityData=[];
 let activityPage=1;
 const ACTIVITY_PER_PAGE=25;
+let activeSessionData=[];
+let activeDevicePage=1;
+const ACTIVE_DEVICES_PER_PAGE=25;
 
 async function loadActivity(){
   if(!me || me.role!=='super_admin') return;
   const box=$('#activityLogs');
   box.innerHTML='<p class="co">Loading activity…</p>';
+  $('#activeDeviceSummary').innerHTML='<p class="co">Loading active devices…</p>';
   try{
     const result=await api('activity');
-    const sessions=result.active_sessions||[];
+    activeSessionData=result.active_sessions||[];
     activityData=result.activities||[];
-    const byUser={};
-    sessions.forEach(session=>{
-      const key=String(session.user_id);
-      byUser[key]=(byUser[key]||0)+1;
-    });
-    $('#activeDeviceSummary').innerHTML=`
-      <b>Currently logged-in devices: ${sessions.length}</b>
-      <div class="app-table-wrap" style="margin-top:10px">
-        <table class="app-table">
-          <thead><tr><th>User ID</th><th>Name / Email</th><th>Role</th><th>Device / Browser</th><th>IP Address</th><th>Login Time</th><th>Last Active</th><th>User Devices</th></tr></thead>
-          <tbody>${sessions.length?sessions.map(x=>`
-            <tr>
-              <td>${esc(x.user_id)}</td>
-              <td>${esc(x.full_name||'—')}<br><span class="co">${esc(x.email||'')}</span></td>
-              <td>${esc(x.role||'')}</td>
-              <td>${esc(x.device_label||'Unknown')}<br><span class="co">${esc(x.user_agent||'')}</span></td>
-              <td>${esc(x.ip_address||'Unknown')}</td>
-              <td>${esc(applicationDate(x.created_at))}</td>
-              <td>${esc(applicationDate(x.last_seen_at))}</td>
-              <td>${byUser[String(x.user_id)]||1}</td>
-            </tr>`).join(''):'<tr><td colspan="8">No active sessions.</td></tr>'}</tbody>
-        </table>
-      </div>`;
+    activeDevicePage=1;
     activityPage=1;
+    renderActiveDevices();
     renderActivityLogs();
   }catch(error){
     box.innerHTML=`<p class="co">Unable to load activity log: ${esc(error.message)}</p>`;
+    $('#activeDeviceSummary').innerHTML=`<p class="co">Unable to load active devices: ${esc(error.message)}</p>`;
   }
+}
+
+function renderActiveDevices(){
+  const panel=$('#activeDeviceSummary');
+  const byUser={};
+  activeSessionData.forEach(session=>{
+    const key=String(session.user_id);
+    byUser[key]=(byUser[key]||0)+1;
+  });
+  const total=activeSessionData.length;
+  const pageCount=Math.max(1,Math.ceil(total/ACTIVE_DEVICES_PER_PAGE));
+  activeDevicePage=Math.min(Math.max(1,activeDevicePage),pageCount);
+  const from=total?(activeDevicePage-1)*ACTIVE_DEVICES_PER_PAGE:0;
+  const to=Math.min(from+ACTIVE_DEVICES_PER_PAGE,total);
+  const rows=activeSessionData.slice(from,to);
+  panel.innerHTML=`
+    <b>Currently logged-in devices: ${total}</b>
+    <div class="app-table-wrap" style="margin-top:10px">
+      <table class="app-table">
+        <thead><tr><th>User ID</th><th>Name / Email</th><th>Role</th><th>Device / Browser</th><th>IP Address</th><th>Login Time</th><th>Last Active</th><th>User Devices</th></tr></thead>
+        <tbody>${rows.length?rows.map(x=>`
+          <tr>
+            <td>${esc(x.user_id)}</td>
+            <td>${esc(x.full_name||'—')}<br><span class="co">${esc(x.email||'')}</span></td>
+            <td>${esc(x.role||'')}</td>
+            <td>${esc(x.device_label||'Unknown')}<br><span class="co">${esc(x.user_agent||'')}</span></td>
+            <td>${esc(x.ip_address||'Unknown')}</td>
+            <td>${esc(applicationDate(x.created_at))}</td>
+            <td>${esc(applicationDate(x.last_seen_at))}</td>
+            <td>${byUser[String(x.user_id)]||1}</td>
+          </tr>`).join(''):'<tr><td colspan="8">No active sessions.</td></tr>'}</tbody>
+      </table>
+    </div>
+    <div class="app-pagination">
+      <div class="app-count">Showing ${total?from+1:0}–${to} of ${total} devices · Page ${activeDevicePage} of ${pageCount}</div>
+      <div class="page-actions">
+        <button class="btn sm" type="button" data-device-page="prev" ${activeDevicePage<=1?'disabled':''}>Previous</button>
+        <button class="btn sm" type="button" data-device-page="next" ${activeDevicePage>=pageCount?'disabled':''}>Next</button>
+      </div>
+    </div>`;
+  panel.querySelectorAll('[data-device-page]').forEach(button=>{
+    button.addEventListener('click',()=>{
+      activeDevicePage+=button.dataset.devicePage==='next'?1:-1;
+      renderActiveDevices();
+    });
+  });
 }
 
 function renderActivityLogs(){
@@ -1470,7 +1520,7 @@ function setupDashboardToggle(buttonId,contentId,label) {
 }
 setupDashboardToggle('accountApprovalsToggle','accountApprovalsContent','Employer Account Approvals');
 setupDashboardToggle('passwordRequestsToggle','passwordRequestsContent','Password Reset Requests');
-setupDashboardToggle('activityToggle','activityContent','Activity Log & Active Devices');
+setupDashboardToggle('activityToggle','activityContent','Login & Activity History');
 setupDashboardToggle('applicationsToggle','applicationsContent','Applications & resumes');
 
 // INITIAL LOAD

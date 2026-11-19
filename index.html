@@ -97,6 +97,14 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
 .app-pagination button:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
 .app-count{font-size:13px;color:var(--muted)}
 .app-empty{padding:24px;text-align:center;color:var(--muted)}
+.success-dialog{width:min(460px,92vw);border:0;border-radius:28px;padding:0;overflow:hidden;text-align:center;box-shadow:0 24px 80px #102f2340}
+.success-dialog::backdrop{background:rgba(13,35,27,.68);backdrop-filter:blur(5px)}
+.success-inner{padding:38px 30px 30px;background:linear-gradient(160deg,#f4fbf6,#fff 65%)}
+.success-icon{width:76px;height:76px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;background:#dff5e6;color:#16856b;font-size:38px;font-weight:800;box-shadow:0 0 0 9px #eaf8ee}
+.success-dialog h2{font-size:30px;margin-bottom:10px;color:#183b2d}
+.success-dialog p{color:#60746a;margin:0 auto 14px;max-width:350px}
+.success-note{background:#edf6f0;border:1px solid #dcebe1;border-radius:15px;padding:13px 15px;margin:20px 0;color:#345849;font-size:14px}
+.success-dialog .btn{min-width:180px}
 
 @media(max-width:600px){.hero{padding:38px 22px}.row{grid-template-columns:1fr}.wrap{padding:0 14px}.search{border-radius:18px}.search .btn{padding:8px 12px}.grid{grid-template-columns:1fr}.mine{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -192,6 +200,18 @@ footer{text-align:center;color:var(--muted);padding:30px 0 40px;font-size:14px}
       <button class="btn pri" style="margin-top:16px" type="submit">Send application</button>
       <div class="msg hide" id="aMsg"></div>
     </form>
+  </div>
+</dialog>
+
+<!-- APPLICATION SUCCESS -->
+<dialog id="successDlg" class="success-dialog" aria-labelledby="successTitle">
+  <div class="success-inner">
+    <div class="success-icon" aria-hidden="true">✓</div>
+    <h2 id="successTitle">Thank you for applying!</h2>
+    <p id="successGreeting">Your application has been submitted successfully.</p>
+    <div class="success-note">Our recruiting team will review your application and reach out to you by <b>call or text</b> on the contact number you provided.</div>
+    <p>We appreciate your interest in NurseWave and wish you the very best!</p>
+    <button class="btn pri" type="button" id="successDone" style="margin-top:12px">Back to jobs</button>
   </div>
 </dialog>
 
@@ -851,6 +871,8 @@ $('#postForm').onsubmit=async e=>{
   }
 };
 
+$('#successDone').onclick=()=>$('#successDlg').close();
+
 // SUBMIT APPLICATION
 $('#applyForm').onsubmit=async e=>{
   e.preventDefault();
@@ -882,8 +904,13 @@ $('#applyForm').onsubmit=async e=>{
       body:fd
     });
 
-    m.textContent='Application submitted successfully. Thank you!';
+    const candidateName = e.target.elements.name.value.trim();
     e.target.reset();
+    $('#jobDlg').close();
+    $('#successGreeting').textContent = candidateName
+      ? `Hi ${candidateName}, your application has been received successfully.`
+      : 'Your application has been received successfully.';
+    $('#successDlg').showModal();
 
   } catch(x) {
     m.textContent=x.message;

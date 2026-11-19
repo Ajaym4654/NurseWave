@@ -593,7 +593,7 @@ function render() {
     (cat==='All' || j.state===cat) &&
     (!posF || j.title===posF) &&
     (!typeF || String(j.hrs)===typeF) &&
-    (j.title+' '+j.company+' '+j.loc).toLowerCase().includes(q)
+    (j.title+' '+(j.specialty||'')+' '+j.company+' '+j.loc).toLowerCase().includes(q)
   );
 
   $('#grid').innerHTML = res.length
